@@ -1,1 +1,30 @@
-
+{
+    "version": "7.14.0",
+    "build": "26.10.29",
+    "games": {
+        "Doors": [2440500124],
+        "Jailbreak": [245662005]
+    },
+    "modules": {
+        "ui": ["library", "discord", "effects", "translator"],
+        "modules": ["esp", "drawing", "utils"],
+        "packages": ["maid", "signal"]
+    },
+    "directories": [
+        "Twinkhook",
+        "Twinkhook/Settings",
+        "Twinkhook/Languages",
+        "Twinkhook/Music",
+        "Twinkhook/Addons"
+    ],
+    "changelog": [
+        "Added Jailbreak support",
+        "Jailbreak client side ac bypassed (You wont get banned)",
+        "Rewrote alot of doors code",
+        "Added herobrine",
+        "Less FPS with doors maybe",
+        "stuff done",
+        "yep I did stuff",
+        "Removed jailbreak rolling (patched)"
+    ]
+}
