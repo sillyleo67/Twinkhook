@@ -17,7 +17,7 @@ local userinputservice = game:GetService("UserInputService")
 local player = players.LocalPlayer
 local starttime = os.clock()
 
-local repo = "https://raw.githubusercontent.com/sillyleo67/Test-2/main/"
+local repo = "https://raw.githubusercontent.com/sillyleo67/Twinkhook/main/"
 local checkfile = "Twinkhook/Settings/Check.txt"
 local executionsfile = "Twinkhook/Settings/Executions.txt"
 
