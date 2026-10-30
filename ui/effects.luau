@@ -3,6 +3,17 @@ local soundservice = game:GetService("SoundService")
 
 local udim = UDim2.fromOffset
 
+local function create(classname, properties)
+    local inst = Instance.new(classname)
+    for i, v in next, properties do
+        if i ~= "Parent" then
+            inst[i] = v
+        end
+    end
+    inst.Parent = properties.Parent
+    return inst
+end
+
 local styles = {
     Snow = function(p)
         p.speed = 0.03 + p.depth * 0.09
@@ -66,13 +77,21 @@ local effects = {}
 effects.__index = effects
 
 function effects.new(library, folder)
+    local background = create("ScreenGui", {
+        Name = "_Background",
+        IgnoreGuiInset = true,
+        ResetOnSpawn = false,
+        Enabled = false,
+        DisplayOrder = library.ScreenGui.DisplayOrder - 1,
+        Parent = library.ScreenGui.Parent
+    })
     local inst = setmetatable({
         library = library,
         folder = folder,
-        music = Instance.new("Sound"),
-        background = Instance.new("ScreenGui"),
-        tint = Instance.new("Frame"),
-        glow = Instance.new("Frame"),
+        music = create("Sound", { Name = "_MenuMusic", Looped = true, Parent = soundservice }),
+        background = background,
+        tint = create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Parent = background }),
+        glow = create("Frame", { Size = UDim2.fromScale(1, 0.45), Position = UDim2.fromScale(0, 0.55), BorderSizePixel = 0, Parent = background }),
         time = 0,
         songs = {},
         particles = {}
@@ -82,28 +101,8 @@ function effects.new(library, folder)
             table.insert(inst.songs, v:match("[^/\\]+$"))
         end
     end)
-    inst.music.Name = "_MenuMusic"
-    inst.music.Looped = true
-    inst.music.Parent = soundservice
-    inst.background.Name = "_Background"
-    inst.background.IgnoreGuiInset = true
-    inst.background.ResetOnSpawn = false
-    inst.background.Enabled = false
-    inst.background.DisplayOrder = library.ScreenGui.DisplayOrder - 1
-    inst.background.Parent = library.ScreenGui.Parent
-    inst.tint.Size = UDim2.fromScale(1, 1)
-    inst.tint.BorderSizePixel = 0
-    inst.tint.Parent = inst.background
-    inst.glow.Size = UDim2.fromScale(1, 0.45)
-    inst.glow.Position = UDim2.fromScale(0, 0.55)
-    inst.glow.BorderSizePixel = 0
-    inst.glow.Parent = inst.background
-    for i, v in next, { { inst.tint, 0.8, 0.35 }, { inst.glow, 1, 0.82 } } do
-        local gradient = Instance.new("UIGradient")
-        gradient.Rotation = 90
-        gradient.Transparency = NumberSequence.new(v[2], v[3])
-        gradient.Parent = v[1]
-    end
+    create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(0.8, 0.35), Parent = inst.tint })
+    create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.82), Parent = inst.glow })
     library:AddToRegistry(inst.tint, { BackgroundColor3 = "BackgroundColor" })
     library:AddToRegistry(inst.glow, { BackgroundColor3 = "AccentColor" })
     for i = 1, 150 do
@@ -112,30 +111,25 @@ function effects.new(library, folder)
         if i % 3 == 0 then -- wow
             main, second = "FontColor", "AccentColor"
         end
-        local particle = Instance.new("ImageLabel")
-        particle.AnchorPoint = Vector2.new(0.5, 0.5)
-        particle.BorderSizePixel = 0
-        particle.ZIndex = 2 + math.floor(depth * 3)
-        particle.Parent = inst.background
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(1, 0)
-        corner.Parent = particle
-        local stroke = Instance.new("UIStroke")
-        stroke.Enabled = false
-        stroke.Parent = particle
-        local gradient = Instance.new("UIGradient")
-        gradient.Enabled = false
-        gradient.Rotation = 90
-        gradient.Transparency = NumberSequence.new(1, 0)
-        gradient.Parent = particle
+        local particle = create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, ZIndex = 2 + math.floor(depth * 3), Parent = background })
+        local stroke = create("UIStroke", { Enabled = false, Parent = particle })
         library:AddToRegistry(particle, { ImageColor3 = main, BackgroundColor3 = second })
         library:AddToRegistry(stroke, { Color = second })
-        table.insert(inst.particles, { inst = particle, corner = corner, stroke = stroke, gradient = gradient, depth = depth, phase = math.random() * 6, x = math.random(), y = math.random() })
+        table.insert(inst.particles, {
+            inst = particle,
+            corner = create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = particle }),
+            stroke = stroke,
+            gradient = create("UIGradient", { Enabled = false, Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = particle }),
+            depth = depth,
+            phase = math.random() * 6,
+            x = math.random(),
+            y = math.random()
+        })
     end
     library:UpdateColorsUsingRegistry()
     library:OnUnload(function()
         inst.music:Destroy()
-        inst.background:Destroy()
+        background:Destroy()
     end)
     return inst
 end
@@ -190,9 +184,9 @@ function effects:step(dt, amount)
             v.inst.Rotation += v.spin * dt
         end
         if v.pulse ~= 0 then
-            local fade = v.fade + (1 - v.fade) * v.pulse * (0.5 + math.sin(self.time * v.rate + v.phase) * 0.5)
-            v.inst[v.property] = fade
-            v.stroke.Transparency = math.min(fade + 0.6, 1)
+            local alpha = v.fade + (1 - v.fade) * v.pulse * (0.5 + math.sin(self.time * v.rate + v.phase) * 0.5)
+            v.inst[v.property] = alpha
+            v.stroke.Transparency = math.min(alpha + 0.6, 1)
         end
         v.inst.Position = UDim2.fromScale(v.x + math.sin(self.time * 2 + v.phase) * v.sway, v.y)
     end
