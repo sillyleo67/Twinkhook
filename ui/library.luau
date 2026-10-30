@@ -23,8 +23,8 @@ local faded = "<font transparency='0.5'>%s</font>"
 local dot = "<font color='%s'>●</font>  <b>%s</b>  " .. faded
 local versiontext = string.format(accent, "v" .. twinkhook.version) .. "  " .. string.format(faded, twinkhook.build)
 
-local translator = twinkhook.import("translator").new(twinkhook.folder)
-local discord = twinkhook.import("discord").new(library, twinkhook.discord)
+local translator = twinkhook.modules.translator.new(twinkhook.folder)
+local discord = twinkhook.modules.discord.new(library, twinkhook.discord)
 
 local function notify(title, desc, icon, force, chat)
     if library.Unloaded or not force and not toggles.EnableNotifications.Value then
@@ -46,24 +46,21 @@ local function notify(title, desc, icon, force, chat)
     end
 end
 
-local function addelements(parent, elements, prefix)
-    for i, v in next, elements do
-        local args = { v.Arguments }
-        if v.Name then
-            args = { prefix .. v.Name, v.Arguments }
-        end
+local function additems(parent, items, prefix)
+    for i, v in next, items do
+        local args = v.Name and { prefix .. v.Name, v.Arguments } or { v.Arguments }
         if v.Arguments and v.Arguments[1] ~= nil then
             args = v.Arguments
         end
-        local element = parent["Add" .. v.Type:gsub("^Add", "")](parent, unpack(args))
+        local item = parent["Add" .. v.Type:gsub("^Add", "")](parent, unpack(args))
         if v.Dependencies then
             for i2, v2 in next, v.Dependencies do
                 v2[1] = toggles[prefix .. v2[1]] or options[prefix .. v2[1]]
             end
-            element:SetupDependencies(v.Dependencies)
+            item:SetupDependencies(v.Dependencies)
         end
         if v.Elements then
-            addelements(element, v.Elements, prefix)
+            additems(item, v.Elements, prefix)
         end
     end
 end
@@ -90,7 +87,7 @@ if saved then
 end
 
 savemanager:SetLibrary(library)
-savemanager:SetFolder(twinkhook.folder .. "/" .. (twinkhook.lobby and "Lobby" or twinkhook.game))
+savemanager:SetFolder(twinkhook.folder .. "/" .. twinkhook.game)
 savemanager:IgnoreThemeSettings()
 savemanager:SetIgnoreIndexes({ "Language" })
 
@@ -106,11 +103,11 @@ library.window = library:CreateWindow({
 library.loading = library:CreateLoading({
     Title = "Twinkhook",
     Icon = twinkhook.icon,
-    TotalSteps = twinkhook.lobby and 2 or 5,
+    TotalSteps = 5,
     AutoResizeHeight = true
 })
 
-local effects = twinkhook.import("effects").new(library, twinkhook.folder)
+local effects = twinkhook.modules.effects.new(library, twinkhook.folder)
 
 translator:start(library)
 effects:start()
@@ -168,27 +165,21 @@ function library:addhome(tab, addgame)
     gamelist:AddDivider()
     gamelist:AddLabel("Supported:  <b>2</b>  " .. string.format(faded, "1 coming soon"), true)
     gamelist:AddLabel("Want a game added? Ask in the Discord.", true)
-    local info = tabbox:AddTab("Information", "info")
-    info:AddLabel("Version:  <b>v" .. twinkhook.version .. "</b>  " .. string.format(faded, twinkhook.build), true)
-    info:AddLabel("Executor:  <b>" .. executor.name .. "</b>", true)
-    local working = 0
-    for i, v in next, executor.functions do
-        if supported[v] then
-            working += 1
-        end
-    end
-    info:AddLabel("Functions:  <b>" .. working .. " / " .. #executor.functions .. "</b>  " .. string.format(faded, "supported"), true)
-    info:AddLabel("Executions:  <b>" .. twinkhook.executions .. "</b>", true)
-    info:AddLabel(string.format("Loaded In:  <b>%.1fs</b>", os.clock() - twinkhook.starttime), true)
+    local information = tabbox:AddTab("Information", "info")
+    information:AddLabel("Version:  <b>v" .. twinkhook.version .. "</b>  " .. string.format(faded, twinkhook.build), true)
+    information:AddLabel("Executor:  <b>" .. executor.name .. "</b>", true)
+    information:AddLabel("Functions:  <b>" .. #executor.functions - #executor.notsupported .. " / " .. #executor.functions .. "</b>  " .. string.format(faded, "supported"), true)
+    information:AddLabel("Executions:  <b>" .. twinkhook.executions .. "</b>", true)
+    information:AddLabel(string.format("Loaded In:  <b>%.1fs</b>", os.clock() - twinkhook.starttime), true)
     local server = tab:AddRightGroupbox("Discord", "message-circle")
     server:AddLabel("Discord:  <b>" .. twinkhook.discord:gsub("https://", "") .. "</b>", true)
     local members = server:AddLabel("Members:  <b>" .. string.format(faded, "checking...") .. "</b>", true)
     server:AddDivider()
     server:AddButton({ Text = "Join Discord", Callback = discord.join }):AddButton({ Text = "Copy Link", Callback = discord.copy })
     task.spawn(function()
-        local count, online = discord.members()
-        if count then
-            members:SetText("Members:  <b>" .. count .. "</b>  " .. string.format(faded, online .. " online"))
+        local total, online = discord.members()
+        if total then
+            members:SetText("Members:  <b>" .. total .. "</b>  " .. string.format(faded, online .. " online"))
         else
             members:SetText("Members:  <b>" .. string.format(faded, "unknown") .. "</b>")
         end
@@ -275,25 +266,25 @@ function library:addsettings(tab, segment, unload)
     end })
 end
 
-function library:addaddons(tab, info)
+function library:addaddons(tab, config)
     local folder = twinkhook.folder .. "/Addons"
-    local api = info.api
+    local api = config.api
     local loaded, side = {}, "Right"
     api.Library = library
     api.Window = library.window
     api.Toggles = toggles
     api.Options = options
-    api.Tabs = info.tabs
+    api.Tabs = config.tabs
     api.Script = twinkhook
     api.Notify = api.Notify or notify
     function api.GetPlayers()
-        local list = {}
+        local plrs = {}
         for i, v in next, players:GetPlayers() do
             if v ~= player then
-                table.insert(list, v)
+                table.insert(plrs, v)
             end
         end
-        return list
+        return plrs
     end
     function api.IsEnabled(flag)
         return toggles[flag] ~= nil and toggles[flag].Value
@@ -303,8 +294,8 @@ function library:addaddons(tab, info)
         return api.IsEnabled(flag) and (key == nil or key:GetState())
     end
     function api.GetValue(flag)
-        local element = toggles[flag] or options[flag]
-        return element and element.Value
+        local item = toggles[flag] or options[flag]
+        return item and item.Value
     end
     function api.GetFeatures()
         local features = {}
@@ -313,12 +304,12 @@ function library:addaddons(tab, info)
         end
         return features
     end
-    function api.OnFeatureChanged(flag, callback)
-        local element = toggles[flag] or options[flag]
-        local changed = element.Changed or function() end
-        element.Changed = function(...)
-            changed(...)
-            callback(element.Value)
+    function api.OnFeatureChanged(flag, func)
+        local item = toggles[flag] or options[flag]
+        local oldchanged = item.Changed or function() end
+        item.Changed = function(...)
+            oldchanged(...)
+            func(item.Value)
         end
     end
     pcall(makefolder, folder)
@@ -328,41 +319,40 @@ function library:addaddons(tab, info)
     box:AddDivider()
     local label = box:AddLabel("Loaded:  <b>none</b>", true)
     box:AddButton({ Text = "Copy Example Addon", Callback = function()
-        setclipboard(info.example)
+        setclipboard(config.example)
         notify("Example Copied", "Save it as a .lua file in " .. folder .. ".", "clipboard", true)
     end })
     box:AddButton({ Text = "Save Example Addon", Callback = function()
-        pcall(writefile, folder .. "/JoinAlert.lua", info.example)
+        pcall(writefile, folder .. "/JoinAlert.lua", config.example)
         notify("Example Saved", "It's in " .. folder .. "/JoinAlert.lua, execute Twinkhook again to load it.", "save", true)
     end })
     for i, v in next, supported.listfiles and listfiles(folder) or {} do
-        if not v:find(".lua", 1, true) then
-            continue
-        end
-        local succ, res = pcall(function()
-            local addon = loadstring(readfile(v))(library, api)
-            local games = httpservice:JSONEncode(addon.Game or "*"):lower()
-            if not games:find('"*"', 1, true) and not games:find('"' .. info.game .. '"', 1, true) then
-                return
+        if v:find(".lua", 1, true) then
+            local succ, res = pcall(function()
+                local addon = loadstring(readfile(v))(library, api)
+                local games = httpservice:JSONEncode(addon.Game or "*"):lower()
+                if not games:find('"*"', 1, true) and not games:find('"' .. config.game .. '"', 1, true) then
+                    return
+                end
+                local parent = config.tabs[addon.Tab] or tab
+                local title = addon.Title or addon.Name
+                local group = (addon.Side or side) == "Right" and parent:AddRightGroupbox(title, addon.Icon or "puzzle") or parent:AddLeftGroupbox(title, addon.Icon or "puzzle")
+                side = side == "Right" and "Left" or "Right"
+                if addon.Description then
+                    group:AddLabel(addon.Description, true)
+                    group:AddDivider()
+                end
+                if addon.Elements then
+                    additems(group, addon.Elements, addon.Name:gsub("%s+", "") .. "_")
+                end
+                if addon.Init then
+                    addon.Init(group, api)
+                end
+                table.insert(loaded, title)
+            end)
+            if not succ then
+                notify("Addon Failed", v:match("[^/\\]+$") .. " couldn't be loaded: " .. tostring(res), "puzzle", true)
             end
-            local parent = info.tabs[addon.Tab] or tab
-            local title = addon.Title or addon.Name
-            local group = (addon.Side or side) == "Right" and parent:AddRightGroupbox(title, addon.Icon or "puzzle") or parent:AddLeftGroupbox(title, addon.Icon or "puzzle")
-            side = side == "Right" and "Left" or "Right"
-            if addon.Description then
-                group:AddLabel(addon.Description, true)
-                group:AddDivider()
-            end
-            if addon.Elements then
-                addelements(group, addon.Elements, addon.Name:gsub("%s+", "") .. "_")
-            end
-            if addon.Init then
-                addon.Init(group, api)
-            end
-            table.insert(loaded, title)
-        end)
-        if not succ then
-            notify("Addon Failed", v:match("[^/\\]+$") .. " couldn't be loaded: " .. tostring(res), "puzzle", true)
         end
     end
     if #loaded > 0 then
@@ -371,20 +361,30 @@ function library:addaddons(tab, info)
 end
 
 function library:finish(settingstab, requirements)
+    local notsupported, disabled = {}, {}
     for i, v in next, requirements do
-        if supported[i] then
-            continue
-        end
-        for i2, v2 in next, v do
-            local toggle = toggles[v2]
-            if toggle.TooltipTable then
-                toggle.TooltipTable:Destroy()
+        if not supported[i] then
+            table.insert(notsupported, i)
+            for i2, v2 in next, v do
+                if not disabled[v2] then
+                    disabled[v2] = {}
+                end
+                table.insert(disabled[v2], i)
             end
-            toggle.TooltipTable = library:AddTooltip(toggle.Tooltip, "This feature is disabled because your executor does not support '" .. i .. "'.", toggle.Holder)
-            toggle.Unsupported = true
-            toggle:SetDisabled(true)
         end
-        notify("Missing Function", executor.name .. " doesn't support " .. (i == "require" and "requiring the game's modules" or "'" .. i .. "'") .. ", so " .. #v .. " features are disabled.", "triangle-alert", true)
+    end
+    for i, v in next, disabled do
+        local toggle = toggles[i]
+        if toggle.TooltipTable then
+            toggle.TooltipTable:Destroy()
+        end
+        toggle.TooltipTable = library:AddTooltip(toggle.Tooltip, "Your executor doesn't have " .. table.concat(v, ", ") .. ".", toggle.Holder)
+        toggle.Unsupported = true
+        toggle:SetDisabled(true)
+    end
+    if #notsupported > 0 then
+        table.sort(notsupported)
+        notify("Missing Functions", executor.name .. " doesn't support " .. table.concat(notsupported, ", ") .. " so some features wont work.", "triangle-alert", true)
     end
     library.ToggleKeybind = options.MenuKeybind
     savemanager:BuildConfigSection(settingstab)
@@ -395,7 +395,7 @@ function library:finishloading()
     local loading = self.loading
     local started = os.clock()
     loading:SetMessage("Translating the menu")
-    loading:SetCurrentStep(twinkhook.lobby and 2 or 5)
+    loading:SetCurrentStep(loading.TotalSteps)
     task.wait(1)
     repeat
         task.wait(0.1)
