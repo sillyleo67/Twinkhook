@@ -52,19 +52,15 @@ for i, v in next, changelog.modules do
     end
 end
 
-local modules = setmetatable({}, {
-    __index = function(self, modulename)
-        local path = cache.paths[modulename]
-        if not path then
-            error("couldn't find " .. modulename .. " in changelog.json", 2)
-        end
-        while cache.sources[modulename] == nil do
-            task.wait()
-        end
-        rawset(self, modulename, assert(loadstring(cache.sources[modulename] or game:HttpGet(repo .. path), "=" .. modulename))())
-        return rawget(self, modulename)
+local function loadmodule(self, modulename)
+    if not cache.sources[modulename] then
+        error("couldn't find " .. modulename .. " in changelog.json", 2)
     end
-})
+    rawset(self, modulename, assert(loadstring(cache.sources[modulename], "=" .. modulename))())
+    return rawget(self, modulename)
+end
+
+local modules = setmetatable({}, { __index = loadmodule })
 
 local funcs = { "readfile", "writefile", "isfile", "listfiles", "makefolder", "isfolder", "getcustomasset", "request", "require", "getupvalue", "setupvalue", "filtergc", "newcclosure", "checkcaller", "hookfunction", "hookmetamethod", "getnamecallmethod", "getconnections", "firesignal", "setthreadidentity", "setclipboard", "Drawing", "firetouchinterest", "fireproximityprompt", "fireclickdetector", "mousemoverel", "isnetworkowner", "sethiddenproperty" }
 
@@ -162,6 +158,13 @@ local executions = (tonumber(select(2, pcall(readfile, executionsfile))) or 0) +
 
 pcall(writefile, executionsfile, tostring(executions))
 
+for i, v in next, cache.paths do
+    while cache.sources[i] == nil do
+        task.wait()
+    end
+    cache.sources[i] = cache.sources[i] or game:HttpGet(repo .. v)
+end
+
 getgenv().twinkhook = {
     game = thisgame,
     version = changelog.version,
@@ -207,5 +210,7 @@ for i, v in next, funcs do
 end
 
 pcall(delfile, checkfile)
+
+loadmodule(modules, "library")
 
 return true
