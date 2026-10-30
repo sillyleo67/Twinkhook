@@ -1,6 +1,6 @@
 {
-    "version": "7.14.0",
-    "build": "26.10.29",
+    "version": "7.14.3",
+    "build": "26.10.30",
     "games": {
         "Doors": [2440500124],
         "Jailbreak": [245662005]
@@ -25,6 +25,7 @@
         "Less FPS with doors maybe",
         "stuff done",
         "yep I did stuff",
-        "Removed jailbreak rolling (patched)"
+        "Removed jailbreak rolling (patched)",
+        "New logger"
     ]
 }
