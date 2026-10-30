@@ -27,6 +27,7 @@ local thisgame
 for i, v in next, changelog.games do
     if table.find(v, game.GameId) then
         thisgame = i
+        break
     end
 end
 
@@ -34,34 +35,38 @@ if not thisgame then
     return false
 end
 
-local funcs = { "readfile", "writefile", "isfile", "listfiles", "makefolder", "isfolder", "getcustomasset", "httprequest", "require", "getupvalue", "setupvalue", "filtergc", "newcclosure", "checkcaller", "hookfunction", "hookmetamethod", "getnamecallmethod", "getconnections", "firesignal", "setthreadidentity", "setclipboard", "Drawing", "firetouchinterest", "fireproximityprompt", "fireclickdetector", "mousemoverel", "isnetworkowner", "sethiddenproperty" }
-
-local aliases = {
-    httprequest = { "request", "http_request" },
-    getupvalue = { "debug.getupvalue" },
-    setupvalue = { "debug.setupvalue" },
-    newcclosure = { "new_c_closure" },
-    hookfunction = { "hookfunc", "replaceclosure" },
-    getnamecallmethod = { "get_namecall_method" },
-    setthreadidentity = { "setidentity", "set_thread_identity" },
-    setclipboard = { "toclipboard" },
-    mousemoverel = { "mouse_move_rel" },
-    sethiddenproperty = { "set_hidden_property" }
+local cache = {
+    paths = {},
+    sources = {}
 }
 
-local backups = {
-    isfile = function(file)
-        return (pcall(readfile, file))
-    end,
-    isfolder = function(folder)
-        return (pcall(listfiles, folder))
-    end,
-    firesignal = function(signal, ...)
-        for i, v in next, getconnections(signal) do
-            task.spawn(v.Function, ...)
-        end
+for i, v in next, changelog.modules do
+    for i2, v2 in next, v do
+        cache.paths[v2] = i .. "/" .. v2 .. ".luau"
+        task.spawn(function()
+            local succ, res = pcall(function()
+                return game:HttpGet(repo .. cache.paths[v2])
+            end)
+            cache.sources[v2] = succ and res or false
+        end)
     end
-}
+end
+
+local modules = setmetatable({}, {
+    __index = function(self, modulename)
+        local path = cache.paths[modulename]
+        if not path then
+            error("couldn't find " .. modulename .. " in changelog.json", 2)
+        end
+        while cache.sources[modulename] == nil do
+            task.wait()
+        end
+        rawset(self, modulename, assert(loadstring(cache.sources[modulename] or game:HttpGet(repo .. path), "=" .. modulename))())
+        return rawget(self, modulename)
+    end
+})
+
+local funcs = { "readfile", "writefile", "isfile", "listfiles", "makefolder", "isfolder", "getcustomasset", "request", "require", "getupvalue", "setupvalue", "filtergc", "newcclosure", "checkcaller", "hookfunction", "hookmetamethod", "getnamecallmethod", "getconnections", "firesignal", "setthreadidentity", "setclipboard", "Drawing", "firetouchinterest", "fireproximityprompt", "fireclickdetector", "mousemoverel", "isnetworkowner", "sethiddenproperty" }
 
 local function upvaluefunc(obj)
     return loadstring("local obj = ... return function() return obj end")(obj)
@@ -143,37 +148,6 @@ local tests = {
 
 tests.makefolder = tests.isfolder
 
-local executor = {
-    name = identifyexecutor and identifyexecutor() or getexecutorname and getexecutorname() or "Unknown",
-    functions = funcs,
-    supported = {},
-    bad = false
-}
-
-local modulepaths, scripts, cache = {}, {}, {}
-local downloading = 0
-
-local function getfunc(funcname)
-    local env = getfenv()
-    for i, v in next, funcname:split(".") do
-        env = env and env[v]
-    end
-    return env
-end
-
-local function fixfunc(funcname)
-    if getfunc(funcname) ~= nil then
-        return
-    end
-    for i, v in next, aliases[funcname] or {} do
-        if getfunc(v) ~= nil then
-            getgenv()[funcname] = getfunc(v)
-            return
-        end
-    end
-    getgenv()[funcname] = backups[funcname]
-end
-
 local function checkfolders()
     for i, v in next, changelog.directories do
         if not isfolder(v) then
@@ -182,49 +156,7 @@ local function checkfolders()
     end
 end
 
-local function import(modulename)
-    if cache[modulename] == nil then
-        cache[modulename] = loadstring(scripts[modulename] or game:HttpGet(repo .. modulepaths[modulename]), "=" .. modulename)()
-    end
-    return cache[modulename]
-end
-
-for i, v in next, changelog.modules do
-    for i2, v2 in next, v do
-        modulepaths[v2] = i .. "/" .. v2 .. ".luau"
-        downloading += 1
-        task.spawn(function()
-            local succ, res = pcall(function()
-                return game:HttpGet(repo .. modulepaths[v2])
-            end)
-            scripts[v2] = succ and res or nil
-            downloading -= 1
-        end)
-    end
-end
-
-for i, v in next, funcs do
-    fixfunc(v)
-end
-
 pcall(checkfolders)
-pcall(writefile, checkfile, "twinkhook")
-
-for i, v in next, funcs do
-    local works = getfunc(v) ~= nil
-    if works and tests[v] then
-        local succ, res = pcall(tests[v])
-        works = succ and res == true
-    end
-    executor.supported[v] = works
-end
-
-pcall(delfile, checkfile)
-executor.bad = not executor.supported.require
-
-repeat
-    task.wait()
-until downloading == 0
 
 local executions = (tonumber(select(2, pcall(readfile, executionsfile))) or 0) + 1
 
@@ -248,9 +180,32 @@ getgenv().twinkhook = {
         BackgroundColor = "0c0b12",
         OutlineColor = "2a2540"
     },
-    executor = executor,
-    utils = import("utils").new(),
-    import = import
+    executor = {
+        name = identifyexecutor and identifyexecutor() or getexecutorname and getexecutorname() or "Unknown",
+        functions = funcs,
+        supported = {},
+        notsupported = {}
+    },
+    utils = modules.utils.new(),
+    modules = modules
 }
+
+local executor = getgenv().twinkhook.executor
+local env = getfenv()
+
+pcall(writefile, checkfile, "twinkhook")
+
+for i, v in next, funcs do
+    executor.supported[v] = env[v] ~= nil
+    if executor.supported[v] and tests[v] then
+        local succ, res = pcall(tests[v])
+        executor.supported[v] = succ and res == true
+    end
+    if not executor.supported[v] then
+        table.insert(executor.notsupported, v)
+    end
+end
+
+pcall(delfile, checkfile)
 
 return true
